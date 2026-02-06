@@ -33,6 +33,9 @@ export const character: Character = {
     ...(process.env.OLLAMA_API_ENDPOINT?.trim()
       ? ["@elizaos/plugin-ollama"]
       : []),
+    ...(process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim()
+      ? ["@elizaos/plugin-google-genai"]
+      : []),
 
     // Platform plugins
     ...(process.env.TELEGRAM_BOT_TOKEN?.trim()
