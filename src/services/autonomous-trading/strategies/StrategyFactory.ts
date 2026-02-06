@@ -71,38 +71,10 @@ export class StrategyFactory {
       strategies.push(StrategyType.INTERACTIVE);
     }
 
-    // Agent-specific defaults if no explicit configuration
+    // Default to interactive strategy if no explicit configuration
     if (strategies.length === 0) {
-      switch (agentCharacter.toLowerCase()) {
-        case "pamela":
-          // Pamela uses interactive strategy by default
-          strategies.push(StrategyType.INTERACTIVE);
-          break;
-        
-        case "chalk-eater":
-        case "chalk":
-          // Chalk uses expiring markets strategy
-          strategies.push(StrategyType.EXPIRING_MARKETS);
-          break;
-        
-        case "lib-out":
-        case "index-follower":
-        case "spmc":
-          // Index-following agents
-          strategies.push(StrategyType.INDEX);
-          break;
-        
-        case "nothing-ever-happens":
-        case "trumped-up":
-          // Default agents use simple threshold
-          strategies.push(StrategyType.SIMPLE_THRESHOLD);
-          break;
-        
-        default:
-          // Default to simple threshold if nothing else specified
-          if (process.env.TRADING_ENABLED === "true") {
-            strategies.push(StrategyType.SIMPLE_THRESHOLD);
-          }
+      if (process.env.TRADING_ENABLED === "true") {
+        strategies.push(StrategyType.INTERACTIVE);
       }
     }
 
