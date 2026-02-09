@@ -122,9 +122,8 @@ export class NewsService {
       const response = await axios.get("https://newsapi.org/v2/top-headlines", {
         params: {
           apiKey: this.activeApiKeys.get("NewsAPI"),
-          language: "en",
+          country: "us",
           pageSize: 100,
-          category: "business,technology,sports,general",
         },
         timeout: 10000,
       });
@@ -446,7 +445,7 @@ export class NewsService {
                 sortBy: "publishedAt",
                 pageSize: 50,
                 from: new Date(
-                  Date.now() - 24 * 60 * 60 * 1000
+                  Date.now() - 3 * 24 * 60 * 60 * 1000
                 ).toISOString(),
               },
               timeout: 10000,

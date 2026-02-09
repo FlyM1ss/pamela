@@ -59,6 +59,36 @@ export class NewsArbStrategy extends BaseStrategy {
     this.runtime = runtime;
   }
 
+  /**
+   * Call the LLM with retry for transient errors (503 overloaded, etc.)
+   */
+  private async callLLM(prompt: string, maxRetries = 3): Promise<string> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await this.runtime!.useModel(ModelType.TEXT_LARGE, {
+          prompt,
+          stopSequences: [],
+        });
+        const text = typeof response === "string" ? response : String(response);
+        if (!text || text.length === 0) throw new Error("Empty response from model");
+        return text;
+      } catch (error: any) {
+        const msg = error?.message || String(error);
+        const isRetryable = msg.includes("503") || msg.includes("overloaded") || msg.includes("UNAVAILABLE");
+        if (isRetryable && attempt < maxRetries) {
+          const delay = attempt * 10_000; // 10s, 20s, 30s
+          elizaLogger.warn(
+            `NewsArb: LLM overloaded (attempt ${attempt}/${maxRetries}), retrying in ${delay / 1000}s...`
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error("LLM call failed after all retries");
+  }
+
   async findOpportunities(
     openPositions: Map<string, any>
   ): Promise<MarketOpportunity[]> {
@@ -188,12 +218,7 @@ Respond with ONLY a JSON array (no markdown, no explanation):
 If no confirmed events, respond with: []`;
 
     try {
-      const response = await this.runtime!.useModel(ModelType.TEXT_LARGE, {
-        prompt,
-        stopSequences: [],
-      });
-
-      const text = typeof response === "string" ? response : String(response);
+      const text = await this.callLLM(prompt);
       // Extract JSON from response (handle potential markdown wrapping)
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
@@ -280,12 +305,7 @@ Respond with ONLY a JSON array (no markdown, no explanation):
 If no matches, respond with: []`;
 
     try {
-      const response = await this.runtime!.useModel(ModelType.TEXT_LARGE, {
-        prompt,
-        stopSequences: [],
-      });
-
-      const text = typeof response === "string" ? response : String(response);
+      const text = await this.callLLM(prompt);
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
         elizaLogger.debug("NewsArb: LLM returned no JSON for market matching");

@@ -48,7 +48,7 @@
  * - Automatic L1->L2 deposit handling
  */
 
-import { elizaLogger, IAgentRuntime, Service } from "@elizaos/core";
+import { elizaLogger, IAgentRuntime, Service, ModelType } from "@elizaos/core";
 import { TradingConfig } from "../../config/trading-config.js";
 import { initializeClobClient } from "@theschein/plugin-polymarket";
 
@@ -127,47 +127,41 @@ export class AutonomousTradingService extends Service {
 
   async initialize(runtime: IAgentRuntime): Promise<void> {
     this.runtime = runtime;
-    elizaLogger.info("🤖 === AUTONOMOUS TRADING SERVICE STARTING ===");
+    elizaLogger.info("🤖 === AUTONOMOUS TRADING SERVICE ===");
     elizaLogger.info(
       "Configuration: " +
         JSON.stringify({
           unsupervisedMode: this.tradingConfig.unsupervisedMode,
-          simpleStrategy: process.env.SIMPLE_STRATEGY_ENABLED,
-          hardcodedMarkets: process.env.USE_HARDCODED_MARKETS,
           maxDailyTrades: this.tradingConfig.maxDailyTrades,
           maxPositionSize: this.tradingConfig.maxPositionSize,
         })
     );
 
-    // Initialize CLOB client for market data
-    try {
-      this.clobClient = await initializeClobClient(runtime);
-      elizaLogger.info("CLOB client initialized successfully");
-    } catch (error) {
-      elizaLogger.error("Failed to initialize CLOB client: " + error);
+    // ─── Preflight checks ────────────────────────────────────────────
+    const ok = await this.runPreflightChecks(runtime);
+    if (!ok) {
+      elizaLogger.error("Preflight checks failed — trading service will NOT start.");
+      elizaLogger.error("Fix the issues above, then restart.");
       return;
     }
 
-    // Initialize modular components
-    await this.initializeComponents(runtime);
+    // ─── Gate: require FORWARD_TEST=true to proceed ──────────────────
+    if (process.env.FORWARD_TEST !== "true") {
+      elizaLogger.info("╔══════════════════════════════════════════════════════╗");
+      elizaLogger.info("║  All preflight checks passed.                       ║");
+      elizaLogger.info("║  Set FORWARD_TEST=true in .env to start the bot.    ║");
+      elizaLogger.info("╚══════════════════════════════════════════════════════╝");
+      return;
+    }
 
-    // Check initial balance
+    // ─── Initialize components ───────────────────────────────────────
+    await this.initializeComponents(runtime);
     await this.balanceManager?.logInitialBalance();
 
     if (!this.tradingConfig.unsupervisedMode) {
-      elizaLogger.info(
-        "⚠️  UNSUPERVISED MODE DISABLED - Running in monitoring mode only"
-      );
-      elizaLogger.info(
-        "📊 Markets will be scanned but NO trades will be executed"
-      );
-      elizaLogger.info(
-        "💡 To enable trading: Set UNSUPERVISED_MODE=true in .env"
-      );
+      elizaLogger.info("⚠️  UNSUPERVISED MODE DISABLED — monitoring only (no trades)");
     } else {
-      elizaLogger.info(
-        "🚨 UNSUPERVISED MODE ENABLED - Trades will be executed automatically!"
-      );
+      elizaLogger.info("🚨 UNSUPERVISED MODE ENABLED — trades will execute automatically!");
     }
 
     await this.positionManager?.loadExistingPositions();
@@ -180,7 +174,6 @@ export class AutonomousTradingService extends Service {
     this.snapshotInterval = setInterval(async () => {
       try {
         await this.reportService?.writeSnapshot();
-        // Write daily report every 6 hours so there's always a recent one
         const hour = new Date().getHours();
         if (hour % 6 === 0) {
           const { getNewsService } = await import("../../services/news/news-service.js");
@@ -193,6 +186,65 @@ export class AutonomousTradingService extends Service {
     }, 15 * 60 * 1000);
 
     this.startAutonomousTrading();
+  }
+
+  // ─── Preflight checks ───────────────────────────────────────────────
+
+  private async runPreflightChecks(runtime: IAgentRuntime): Promise<boolean> {
+    elizaLogger.info("\n🔍 Running preflight checks...\n");
+    let allPassed = true;
+
+    // 1. LLM model reachable
+    try {
+      const modelName = process.env.GOOGLE_LARGE_MODEL || "(default)";
+      elizaLogger.info(`  [1/3] LLM model (${modelName})...`);
+      const testResponse = await runtime.useModel(ModelType.TEXT_LARGE, {
+        prompt: "Reply with exactly: OK",
+        stopSequences: [],
+      });
+      const text = typeof testResponse === "string" ? testResponse : String(testResponse);
+      if (!text || text.length === 0) throw new Error("Empty response from model");
+      elizaLogger.info(`  ✅ LLM model responding ("${text.trim().slice(0, 20)}")`);
+    } catch (error: any) {
+      elizaLogger.error(`  ❌ LLM model FAILED: ${error.message || error}`);
+      allPassed = false;
+    }
+
+    // 2. NewsAPI key valid
+    try {
+      elizaLogger.info("  [2/3] NewsAPI key...");
+      const apiKey = process.env.NEWS_API_KEY;
+      if (!apiKey) throw new Error("NEWS_API_KEY not set in .env");
+      const res = await fetch(
+        `https://newsapi.org/v2/top-headlines?country=us&pageSize=1&apiKey=${apiKey}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      const body = await res.json() as any;
+      if (body.status === "error") throw new Error(body.message || body.code);
+      elizaLogger.info(`  ✅ NewsAPI key valid (${body.totalResults} headlines available)`);
+    } catch (error: any) {
+      elizaLogger.error(`  ❌ NewsAPI FAILED: ${error.message || error}`);
+      allPassed = false;
+    }
+
+    // 3. Gamma API (Polymarket market data) reachable
+    try {
+      elizaLogger.info("  [3/3] Gamma API (Polymarket)...");
+      const res = await fetch(
+        "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=1",
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as any[];
+      if (!Array.isArray(data) || data.length === 0) throw new Error("No markets returned");
+      elizaLogger.info(`  ✅ Gamma API reachable ("${data[0].question?.slice(0, 50)}...")`);
+    } catch (error: any) {
+      elizaLogger.error(`  ❌ Gamma API FAILED: ${error.message || error}`);
+      allPassed = false;
+    }
+
+    elizaLogger.info(""); // blank line
+    return allPassed;
   }
 
   private async initializeComponents(runtime: IAgentRuntime): Promise<void> {
