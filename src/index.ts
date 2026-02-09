@@ -9,8 +9,8 @@ import {
 import bootstrapPlugin from "@elizaos/plugin-bootstrap";
 import starterPlugin from "./plugin.ts";
 import polymarketPlugin from "@theschein/plugin-polymarket";
-import { getNewsService } from "./services/news";
 import { RedemptionService } from "./services/redemption-service";
+import { AutonomousTradingService } from "./services/autonomous-trading/index";
 import { IndexTradingService } from "./services/IndexTradingService";
 import { InvestmentFundService } from "./services/InvestmentFundService";
 
@@ -64,16 +64,8 @@ const initCharacter = async ({ runtime }: { runtime: IAgentRuntime }) => {
   logger.info("Initializing character");
   logger.info("Name: ", character.name);
   
-  // Start news service if configured
-  if (runtime.getSetting("NEWS_API_KEY")) {
-    try {
-      const newsService = getNewsService();
-      await newsService.start();
-      logger.info("News service started successfully");
-    } catch (error) {
-      logger.warn("Failed to start news service:", error);
-    }
-  }
+  // News service is initialized lazily via getNewsService() when needed.
+  // No independent polling loop — the trading service drives all news fetching.
   
   // Start redemption service
   try {
@@ -82,7 +74,17 @@ const initCharacter = async ({ runtime }: { runtime: IAgentRuntime }) => {
   } catch (error) {
     logger.warn("Failed to start redemption service:", error);
   }
-  
+
+  // Start autonomous trading service (InteractiveStrategy)
+  if (process.env.TRADING_ENABLED === 'true') {
+    try {
+      await AutonomousTradingService.start(runtime);
+      logger.info("Autonomous trading service started successfully");
+    } catch (error) {
+      logger.warn("Failed to start autonomous trading service:", error);
+    }
+  }
+
   // Start index trading service if configured
   if (process.env.INDEX_TRADING_ENABLED === 'true') {
     try {

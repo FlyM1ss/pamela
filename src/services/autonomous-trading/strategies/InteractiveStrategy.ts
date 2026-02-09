@@ -48,6 +48,11 @@ export class InteractiveStrategy extends BaseStrategy {
     const config = this.config as InteractiveStrategyConfig;
     elizaLogger.info("Interactive strategy: Scanning markets with multi-signal analysis");
 
+    // Reset news API cycle counter for this scan
+    try {
+      this.newsService.resetCycleCounter();
+    } catch { /* ignore if not available */ }
+
     try {
       const opportunities: MarketOpportunity[] = [];
       
@@ -177,33 +182,44 @@ export class InteractiveStrategy extends BaseStrategy {
   private async getMarketsToAnalyze(config: InteractiveStrategyConfig): Promise<string[]> {
     const markets: string[] = [];
 
-    // Start with hardcoded markets
-    const { getMarketsToMonitor } = await import("../../../config/hardcoded-markets.js");
-    const monitoredMarkets = getMarketsToMonitor() || [];
-    markets.push(...monitoredMarkets);
+    // Always include hardcoded seed markets
+    const { HARDCODED_MARKET_IDS } = await import("../../../config/hardcoded-markets.js");
+    if (HARDCODED_MARKET_IDS && HARDCODED_MARKET_IDS.length > 0) {
+      markets.push(...HARDCODED_MARKET_IDS);
+      elizaLogger.info(`Added ${HARDCODED_MARKET_IDS.length} hardcoded seed markets`);
+    }
 
     // Add trending markets if enabled
     if (config.checkTrendingTopics) {
       const trendingMarkets = await this.fetchTrendingMarkets();
       markets.push(...trendingMarkets);
+      elizaLogger.info(`Added ${trendingMarkets.length} trending markets`);
     }
 
     // Remove duplicates
-    return [...new Set(markets)];
+    const unique = [...new Set(markets)];
+    elizaLogger.info(`Total unique markets to analyze: ${unique.length}`);
+    return unique;
   }
 
   private async fetchTrendingMarkets(): Promise<string[]> {
     try {
-      const url = `https://gamma-api.polymarket.com/markets?active=true&closed=false&order=volume&limit=50`;
+      const url = `https://gamma-api.polymarket.com/markets?active=true&closed=false&order=volumeNum&ascending=false&limit=100`;
       const response = await fetch(url);
-      
+
       if (!response.ok) {
+        elizaLogger.warn(`Gamma API returned ${response.status} when fetching trending markets`);
         return [];
       }
 
       const markets = await response.json() as any[];
       return markets
-        .filter((m: any) => m.volume > 100000) // High volume markets
+        .filter((m: any) => {
+          const vol = parseFloat(m.volume || "0");
+          const q = m.question || "";
+          // Filter out 5-minute crypto up/down markets and low volume
+          return vol > 100000 && !q.includes("Up or Down");
+        })
         .map((m: any) => m.conditionId)
         .filter(Boolean);
     } catch (error) {

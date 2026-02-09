@@ -45,7 +45,8 @@
     "clean": "rm -rf node_modules dist .eliza",
     "reset:db": "rm -rf .eliza/.elizadb && echo 'Database reset complete'",
     "wallet:new": "node scripts/generate-wallet.js",
-    "wallet:manage": "node scripts/manage-wallets.js"
+    "wallet:manage": "node scripts/manage-wallets.js",
+    "grade": "node scripts/grade-trades.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.8",

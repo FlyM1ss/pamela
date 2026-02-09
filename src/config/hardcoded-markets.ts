@@ -6,12 +6,22 @@
 // Simply add condition IDs here - all market details will be fetched automatically
 // You can find condition IDs from Polymarket URLs:
 // https://polymarket.com/event/[slug]?conditionId=0x...
+// Last updated: 2026-02-07
 export const HARDCODED_MARKET_IDS: string[] = [
-  // Live active markets for testing (low volatility, high liquidity):
-  "0x4319532e181605cb15b1bd677759a3bc7f7394b2fdf145195b700eeaedfd5221", // Fed rate hike in 2025? (4.5% Yes, 95.5% No)
-  "0xfa48a99317daef1654d5b03e30557c4222f276657275628d9475e141c64b545d", // US recession in 2025? (7.5% Yes, 92.5% No)
-  // Add more condition IDs as needed
-  // Empty array = scan all markets (original behavior)
+  // Fed / Macro (high relevance to crypto + economy)
+  "0x46d40e851b24d9b0af4bc1942ccd86439cae82a9011767da14950df0ad997adf", // Will Trump nominate Judy Shelton as next Fed chair? ($58M vol)
+  "0x61b66d02793b4a68ab0cc25be60d65f517fe18c7d654041281bb130341244fcc", // Will Trump nominate Kevin Warsh as next Fed chair? ($32M vol)
+  "0xdeb615a52cd114e5aa27d8344ae506a72bea81f6ed13f5915f050b615a193c20", // Fed decrease rates 50+ bps March 2026? ($29M vol)
+  "0x25aa90b3cd98305e849189b4e8b770fc77fe89bccb7cf9656468414e01145d38", // Fed increase rates 25+ bps March 2026? ($28M vol)
+
+  // Geopolitics (news-driven, good for sentiment analysis)
+  "0xd595eb9b81885ff018738300c79047e3ec89e87294424f57a29a7fa9162bf116", // Trump acquire Greenland before 2027? (12.5% YES, $26M vol)
+  "0x70909f0ba8256a89c301da58812ae47203df54957a07c7f8b10235e877ad63c2", // Khamenei out as Supreme Leader by March 31? (16.5% YES, $10M vol)
+  "0x3488f31e6449f9803f99a8b5dd232c7ad883637f1c86e6953305a2ef19c77f20", // US strikes Iran by Feb 28 2026? (23.5% YES, $9M vol)
+
+  // Sports (high volume, clear resolution)
+  "0xa0eafdfa7da17483796f77f4b287d28834ab97db4a9a6e999b52c1ba239bc2f3", // Seattle Seahawks win Super Bowl 2026? (68.2% YES, $11M vol)
+  "0xc914317b14972d5d15f30740d3bdf32f4028877c13b9d7ccc78b4ba33f67fb1e", // New England Patriots win Super Bowl 2026? (31.8% YES, $15M vol)
 ];
 
 // Simple trading strategy configuration

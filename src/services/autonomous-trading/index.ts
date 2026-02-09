@@ -50,7 +50,6 @@
 
 import { elizaLogger, IAgentRuntime, Service } from "@elizaos/core";
 import { TradingConfig } from "../../config/trading-config.js";
-import { getMarketsToMonitor } from "../../config/hardcoded-markets.js";
 import { initializeClobClient } from "@theschein/plugin-polymarket";
 
 import { OpportunityEvaluator } from "./opportunity-evaluator.js";
@@ -58,7 +57,8 @@ import { TradeExecutor } from "./trade-executor.js";
 import { PositionManager } from "./position-manager.js";
 import { BalanceManager } from "./balance-manager.js";
 import { TradingDecision, MarketOpportunity } from "./types.js";
-import { StrategyFactory, IStrategy } from "./strategies/index.js";
+import { TradingReportService } from "./trading-report.js";
+import { NewsArbStrategy } from "./strategies/NewsArbStrategy.js";
 
 export class AutonomousTradingService extends Service {
   private tradingConfig: TradingConfig;
@@ -73,8 +73,9 @@ export class AutonomousTradingService extends Service {
   private tradeExecutor: TradeExecutor | null = null;
   private positionManager: PositionManager | null = null;
   private balanceManager: BalanceManager | null = null;
-  private strategyFactory: StrategyFactory | null = null;
-  private strategies: IStrategy[] = [];
+  private newsArbStrategy: NewsArbStrategy | null = null;
+  private reportService: TradingReportService | null = null;
+  private snapshotInterval: NodeJS.Timeout | null = null;
 
   private static instance: AutonomousTradingService | null = null;
 
@@ -170,36 +171,42 @@ export class AutonomousTradingService extends Service {
     }
 
     await this.positionManager?.loadExistingPositions();
+
+    // Start reporting service
+    this.reportService = new TradingReportService();
+    await this.reportService.start();
+
+    // Write snapshot every 15 minutes + daily report every 6 hours
+    this.snapshotInterval = setInterval(async () => {
+      try {
+        await this.reportService?.writeSnapshot();
+        // Write daily report every 6 hours so there's always a recent one
+        const hour = new Date().getHours();
+        if (hour % 6 === 0) {
+          const { getNewsService } = await import("../../services/news/news-service.js");
+          const newsApiCalls = getNewsService().getDailyRequestCount();
+          await this.reportService?.writeDailyReport(newsApiCalls);
+        }
+      } catch (err) {
+        elizaLogger.debug("Snapshot/report write failed: " + err);
+      }
+    }, 15 * 60 * 1000);
+
     this.startAutonomousTrading();
   }
 
   private async initializeComponents(runtime: IAgentRuntime): Promise<void> {
-    // Initialize position manager first as it's needed by scanner
     this.positionManager = new PositionManager(runtime);
-    
-    // Initialize strategy factory and create strategies
-    this.strategyFactory = new StrategyFactory();
-    this.strategies = await this.strategyFactory.createStrategies();
-    
-    if (this.strategies.length > 0) {
-      elizaLogger.info(`Initialized ${this.strategies.length} trading strategies:`);
-      this.strategies.forEach(s => elizaLogger.info(`  - ${s.name}: ${s.description}`));
-    } else {
-      // Default to SimpleThresholdStrategy if no strategies configured
-      elizaLogger.info("No strategies configured, using default SimpleThresholdStrategy");
-      const { SimpleThresholdStrategy } = await import("./strategies/SimpleThresholdStrategy.js");
-      this.strategies = [new SimpleThresholdStrategy({
-        enabled: true,
-        buyThreshold: 0.3,
-        sellThreshold: 0.7,
-        minEdge: 0.15,
-        useHardcodedMarkets: true,
-        useNewsSignals: true
-      })];
-      elizaLogger.info("Initialized default SimpleThresholdStrategy");
-    }
-    
-    // Initialize other components
+
+    // Initialize NewsArbStrategy as the sole strategy
+    this.newsArbStrategy = new NewsArbStrategy({
+      enabled: true,
+      maxPrice: 0.90,
+      marketFetchLimit: 100,
+    });
+    this.newsArbStrategy.setRuntime(runtime);
+    elizaLogger.info("Initialized NewsArbStrategy (news-latency arbitrage)");
+
     this.opportunityEvaluator = new OpportunityEvaluator(this.tradingConfig);
     this.tradeExecutor = new TradeExecutor(
       runtime,
@@ -214,19 +221,16 @@ export class AutonomousTradingService extends Service {
 
     this.isRunning = true;
     elizaLogger.info(
-      "📡 Starting market monitoring - scanning every 60 seconds"
-    );
-    elizaLogger.info(
-      `🎯 Monitoring ${getMarketsToMonitor()?.length || 0} hardcoded markets`
+      "📡 Starting news-arbitrage monitoring — scanning every 30 minutes"
     );
 
     this.scanInterval = setInterval(async () => {
-      elizaLogger.debug("⏰ Running scheduled market scan...");
+      elizaLogger.info("⏰ Running scheduled news-arb scan...");
       await this.scanAndTrade();
-    }, 60000); // Scan every minute
+    }, 30 * 60 * 1000); // 30 minutes
 
     // Initial scan
-    elizaLogger.info("🔍 Running initial market scan...");
+    elizaLogger.info("🔍 Running initial news-arb scan...");
     this.scanAndTrade();
   }
 
@@ -239,43 +243,36 @@ export class AutonomousTradingService extends Service {
         return;
       }
 
-      let opportunities: MarketOpportunity[] = [];
-
-      // Use strategies to find opportunities
-      for (const strategy of this.strategies) {
-        if (strategy.isActive()) {
-          const strategyOpportunities = await strategy.findOpportunities(
-            this.positionManager!.getOpenPositions()
-          );
-          opportunities.push(...strategyOpportunities);
-          
-          if (strategyOpportunities.length > 0) {
-            elizaLogger.info(
-              `${strategy.name} found ${strategyOpportunities.length} opportunities`
-            );
-          }
-        }
+      if (!this.newsArbStrategy || !this.newsArbStrategy.isActive()) {
+        elizaLogger.debug("NewsArbStrategy not active, skipping scan");
+        return;
       }
+
+      // Run the news-arb pipeline
+      const opportunities = await this.newsArbStrategy.findOpportunities(
+        this.positionManager!.getOpenPositions()
+      );
 
       if (opportunities.length > 0) {
         elizaLogger.info(
-          `✨ Found ${opportunities.length} total trading opportunities!`
+          `✨ Found ${opportunities.length} news-arb opportunities!`
         );
         for (const opp of opportunities) {
           elizaLogger.info(
-            `  📈 ${opp.question}: ${opp.outcome} @ ${(opp.currentPrice * 100).toFixed(
-              1
-            )}%`
+            `  📈 ${opp.question}: ${opp.outcome} @ ${(opp.currentPrice * 100).toFixed(1)}¢`
           );
         }
       } else {
-        elizaLogger.debug("No trading opportunities found in current scan");
+        elizaLogger.info("No news-arb opportunities this cycle");
       }
+
+      const decisions: TradingDecision[] = [];
 
       for (const opportunity of opportunities) {
         if (!this.canTrade()) break;
 
         const decision = await this.opportunityEvaluator!.evaluate(opportunity);
+        decisions.push(decision);
 
         if (decision.shouldTrade) {
           if (this.tradingConfig.unsupervisedMode) {
@@ -291,8 +288,15 @@ export class AutonomousTradingService extends Service {
           elizaLogger.debug(`❌ Skipping opportunity: ${decision.reasoning}`);
         }
       }
+
+      // Record scan in report
+      try {
+        this.reportService?.recordScan(100, opportunities, decisions);
+      } catch (err) {
+        elizaLogger.debug("Report recording failed: " + err);
+      }
     } catch (error) {
-      elizaLogger.error("Error during autonomous trading scan: " + error);
+      elizaLogger.error("Error during news-arb scan: " + error);
     }
   }
 
@@ -401,6 +405,19 @@ export class AutonomousTradingService extends Service {
       clearInterval(this.scanInterval);
       this.scanInterval = null;
     }
+    if (this.snapshotInterval) {
+      clearInterval(this.snapshotInterval);
+      this.snapshotInterval = null;
+    }
+    // Write final report on shutdown
+    try {
+      const { getNewsService } = await import("../../services/news/news-service.js");
+      const newsApiCalls = getNewsService().getDailyRequestCount();
+      const reportPath = await this.reportService?.stop(newsApiCalls);
+      elizaLogger.info(`Final report written to ${reportPath}`);
+    } catch (err) {
+      elizaLogger.warn("Could not write final report: " + err);
+    }
     elizaLogger.info("Autonomous Trading Service stopped");
   }
 
@@ -409,13 +426,9 @@ export class AutonomousTradingService extends Service {
     const positionSummary = this.positionManager?.getPositionSummary() || "No positions";
     const balanceStatus = this.balanceManager?.getBalanceStatus() || "Balance unknown";
     
-    let strategyStatus = "";
-    if (this.strategies.length > 0) {
-      strategyStatus = "\n\n📊 Active Strategies:\n";
-      this.strategies.forEach(s => {
-        strategyStatus += `- ${s.name}: ${s.isActive() ? "✅ Active" : "❌ Inactive"}\n`;
-      });
-    }
+    const strategyStatus = this.newsArbStrategy
+      ? `\n\n📊 Strategy: ${this.newsArbStrategy.name} (${this.newsArbStrategy.isActive() ? "✅ Active" : "❌ Inactive"})`
+      : "";
     
     return `
 🤖 Autonomous Trading Service Status:

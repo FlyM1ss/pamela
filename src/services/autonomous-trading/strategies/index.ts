@@ -11,3 +11,4 @@ export { IndexStrategy, IndexStrategyConfig } from "./IndexStrategy";
 export { ExpiringMarketsStrategy, ExpiringMarketsConfig } from "./ExpiringMarketsStrategy";
 export { InteractiveStrategy, InteractiveStrategyConfig } from "./InteractiveStrategy";
 export { StrategyFactory, StrategyType } from "./StrategyFactory";
+export { NewsArbStrategy, NewsArbConfig } from "./NewsArbStrategy";
