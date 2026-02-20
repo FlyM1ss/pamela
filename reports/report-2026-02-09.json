@@ -1,0 +1,112 @@
+{
+  "date": "2026-02-09",
+  "generatedAt": "2026-02-09T11:54:52.717Z",
+  "summary": {
+    "totalScans": 12,
+    "totalOpportunities": 0,
+    "totalWouldTrade": 0,
+    "uniqueMarketsAnalyzed": 0,
+    "newsApiCallsUsed": 19,
+    "uptimeHours": 6
+  },
+  "hourlyBreakdown": [
+    {
+      "hour": "2026-02-09T05",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T06",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T06",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T07",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T07",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T08",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T08",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T09",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T09",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T10",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T10",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    },
+    {
+      "hour": "2026-02-09T11",
+      "totalScans": 1,
+      "totalOpportunities": 0,
+      "totalWouldTrade": 0,
+      "uniqueMarkets": [],
+      "bestOpportunity": null
+    }
+  ],
+  "topMarkets": [],
+  "allDecisions": []
+}
